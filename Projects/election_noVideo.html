@@ -1,0 +1,686 @@
+<html lang="en"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>D3 Test</title>
+<script src="./lib/d3.js" charset="utf-8"></script>
+<script src="./lib/topojson.js" charset="utf-8"></script>
+<style type="text/css">
+  .line { fill:none; stroke:black;}
+  .axis text {
+    font-family: sans-serif;
+    font-size: 11px;
+  }
+  .axis path,
+  .axis line {
+    fill: none;
+    stroke: black;
+  }
+  .axis_x line {
+    fill: none;
+    stroke: black;
+  }
+  .itemColor { stroke: #DC143C; }
+  .itemColor2 { stroke: #6495ED; }
+</style>
+</head>
+<body>
+<table>
+<div id="control" style="width:640px; margin:0px 0px 10px 0px; float:left;">
+    <button id="play">play</button>
+    <button id="stop">stop</button>
+    <button id="pause">pause</button>
+    <button id="go">go 10s</button>
+    <button id="back">back 10s</button>
+    <button id="rateup">rateup</button>
+    <button id="ratedown">ratedown</button>
+    <div>
+      <div id="time" style="float:left; margin-right:10px;"></div>
+      <div id="rate"></div>
+    </div>
+</div>
+<div>
+  <div style="margin-left:700px" id="bubble_name"></div>
+</div>
+
+<tr>
+  <td width = "700" height="400">
+  <video src="" id="video" width="700" height="400" style="margin:0px 0px 5px 0px;" controls ></video>
+  </td>
+  <td width="550" height="400" id="map"></td>
+</tr>
+<tr>
+  <td width="700" height="120" id="bar"></td>
+  <td width="550" height="100" id="switch">
+    <div style="float:left; margin:0px 20px 0px 20px;">
+      <img src="./lib/first.png" width="150" id="movie1">
+      <h4 align="center">11/9 00:20 ~ 01:19</h4>
+    </div>
+    <div style="float:left; margin-right:20px;">
+      <img src="./lib/middle.png" width="150" id="movie2">
+      <h4 align="center">11/9 03:01 ~ 03:53</h4>
+    </div>
+    <div style="float:left; ">
+      <img src="./lib/last.png" width="150" id="movie3">
+      <h4 align="center">11/9 04:01 ~ 04:59</h4>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td>
+    <div color="CornflowerBlue">
+      <h5 align="left">Red Line : The number of times "Donald" or "Trump" has been used per minute <br>
+      Blue Line : The number of times "Clinton" or "Hillary" has been used per minute</h5>
+    </div>
+  </td>
+</tr>
+</table>
+<script type="text/javascript">
+
+var width = 550;
+var height = 400;
+
+var bar_width = 700;
+var bar_height = 120;
+var offsetX = 30;
+var offsetY = 20;
+
+var all_words;
+var margin;
+
+var color = d3.scaleOrdinal(d3.schemeCategory20c)
+
+//var parseTime = d3.timeParse("%Y-%m-%d %H:%M:%S")
+var parseTime = d3.utcParse("%Y-%m-%d %H:%M:%S")
+
+
+var initialTime
+var lastTime
+
+var timeline = []
+var numOfHists
+var numOfTimelines
+
+var realX
+var time_position
+
+var global_currentTime
+
+var svg_bar = d3.select("#bar")
+      .append("svg")
+      .attr("width", bar_width)
+      .attr("height", bar_height)
+      .attr("style", "outline: 1px solid black;")
+
+var y_scale = d3.scaleLinear()
+                .domain([0,250])
+                .range([bar_height - 2 * offsetY, 0])
+                //.range([0,bar_height - 2 * offsetY])
+
+function drawGraph() {
+
+  svg_bar.selectAll("path").remove()
+  svg_bar.selectAll("g").remove()
+
+  var line_tr = d3.line()
+               .x(function(d,i) {
+                 return offsetX + i * margin;
+               })
+               .y(function(d,i) {
+                 //var y_tr = (d.val_tr * 1000) / Number(d.counts)
+                 var y_tr = d.val_tr
+                 //console.log(y_tr);
+                 //return bar_height - y_scale(y_tr) - 2 * offsetY;
+                 return y_scale(y_tr)
+               })
+               //.curve(d3.curveBasis)
+
+   var line_cl = d3.line()
+                .x(function(d,i) {
+                  return offsetX + i * margin;
+                })
+                .y(function(d,i) {
+                  //var y_cl = (d.val_cl * 1000) / Number(d.counts)
+                  var y_cl = d.val_cl
+                  //console.log(i, y_cl);
+                  //return bar_height - y_scale(y_cl) - 2 * offsetY;
+                  return y_scale(y_cl)
+                })
+
+   svg_bar.append("path")
+          .attr("class", "line " + "itemColor")
+          .attr("d", line_tr(all_words));
+
+    svg_bar.append("path")
+           .attr("class", "line " + "itemColor2")
+           .attr("d", line_cl(all_words));
+
+}
+
+
+function drawScale() {
+
+  svg_bar.append("g")
+         .attr("class", "axis")
+         .attr("transform", "translate(" + offsetX + "," + offsetY + ")")
+         .call(
+           d3.axisLeft(y_scale)
+             .ticks(5)
+         )
+
+   var x_scale = d3.scaleTime()
+                        .domain(d3.extent(all_words, function(d) { return d.time; }))
+                        //.domain(new Date("2016/11/09 00:20:00"), new Date("2016/11/09 01:19:00"))
+                        .range([0,bar_width])
+
+    svg_bar.append("g")
+           .attr("class", "axis")
+           .attr("transform", "translate(" + offsetX + "," + (bar_height - offsetY) + ")")
+           .call(
+             d3.axisBottom(x_scale)
+             .ticks(10)
+             .tickFormat(d3.utcFormat("%H:%M"))
+           )
+
+}
+
+function drawVerticalline(realX) {
+
+  //var co1 = [realX, offsetY]
+  //var co2 = [realX, bar_height - offsetY]
+  var coords = [
+    {'x':realX, 'y':0},
+    {'x':realX, 'y':bar_height - offsetY}
+  ]
+
+  //console.log(co1);
+  //console.log(coords);
+
+  var vertical_line = d3.line()
+               .x(function(d) {
+                 return d.x
+               })
+               .y(function(d) {
+                 return d.y
+               })
+
+  //console.log(vertical_line(coords));
+
+   var vertical_path = svg_bar.append('path')
+                              //.attr("class", "line " + "itemColor")
+                              .attr("stroke", 'black')
+                              .attr("d", vertical_line(coords))
+                              .attr("stroke-width", 1)
+
+}
+
+var svg = d3.select("#map")
+                  .append("svg")
+                  .attr("width", width)
+                  .attr("height", height)
+
+
+function drawBubbleChart(currentTime, delta) {
+  var i = Math.floor(currentTime / delta)
+  //console.log(i);
+  //console.log(timeline[i]);
+  //console.log(numOfTimelines);
+
+  var bubble = d3.pack()
+                  .size([width - 100, height])
+                  .padding(10)
+
+  //console.log(i);
+  //console.log(timeline[i]);
+
+  var root = d3.hierarchy(timeline[i])
+                .sum(function(d) { return d.value; })
+                .sort(function(a, b) { return b.value - a.value; })
+
+  bubble(root)
+
+  svg.selectAll(".node").remove()
+
+  //svg.selectAll("g").remove()
+  //svg.selectAll("circle").remove()
+  //svg.selectAll("text").remove()
+
+  var node = svg.selectAll(".node")
+      .data(root.children)
+      .enter()
+      .append("g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+
+  node.append("circle")
+    .attr("r", function(d) { return d.r; })
+    .style("fill", function(d, i) {
+      //console.log(d);
+      if (d.data.name === 'hillary' || d.data.name === 'clinton') {
+        return 'CornflowerBlue';
+      }
+      else if (d.data.name === 'donald' || d.data.name === 'trump') {
+        return 'Crimson';
+      }
+      else {
+        return 'DarkSeaGreen';
+      }
+    })
+
+  node.append("text")
+      .style("text-anchor", "middle")
+      .text(function(d) { return d.data.name; })
+}
+
+// マウスイベントを設定
+document.getElementById("bar").addEventListener( "click", function( e ) {
+	// マウス位置を取得する
+	var mouseX = e.pageX ;	// X座標
+	var mouseY = e.pageY ;	// Y座標
+
+  //console.log(mouseX, mouseY);
+
+	// 要素の位置を取得
+	var element = document.getElementById("bar") ;
+	var rect = element.getBoundingClientRect() ;
+
+	// 要素の位置座標を計算
+	var positionX = rect.left + window.pageXOffset ;	// 要素のX座標
+
+	// 要素の左上からの距離を計算
+	realX = mouseX - positionX ;
+
+  //console.log(realX, realY);
+  time_position = (realX - offsetX) / margin
+  console.log(time_position);
+
+  global_currentTime = time_position * 60;
+
+  drawGraph()
+  drawScale()
+  drawVerticalline(realX)
+
+  var totalTime = 3600
+  var delta = totalTime / numOfTimelines
+  drawBubbleChart(global_currentTime, delta)
+
+} )
+
+// control video
+var video = document.getElementById('video');
+// Rate display area
+var ratedisplay = document.getElementById("rate");
+var timedisplay = document.getElementById("time");
+var bubblename = document.getElementById("bubble_name");
+var currentTime
+var totalTime
+
+// switch movie
+var movie1 = document.getElementById('movie1');
+movie1.addEventListener('click', function () {
+
+  changeSource("./lib/Decision 2016_ LIVE Election Night Coverage _ NBC News - YouTube - Google Chrome 2016_11_09 9_20_33.mp4")
+
+  d3.csv("./Database/hist.csv", function(error, data){
+
+    if(error) { console.log("error"); }
+
+    data.forEach(function(d) {
+        //console.log(d.time);
+        d.time = parseTime(d.time)
+        //console.log(d.time);
+    })
+
+    all_words = data;
+
+    initialTime = all_words[0].time
+    //console.log(initialTime);
+    lastTime = all_words[all_words.length - 1].time
+    //console.log(initialTime, lastTime);
+    numOfHists = all_words.length
+    //console.log(numOfHists);
+    margin = bar_width / (all_words.length - 1);
+
+  });
+
+  d3.json("./Database/hist_per_minute.json", function(error, data){
+
+      var HistPerMinute = {}
+      HistPerMinute = data
+
+      timeline = []
+
+      for(var i=0; i<Object.keys(HistPerMinute).length; i++){
+        var st = String(i)
+        var tmp_list = []
+        var tmp_hash = {}
+        var sum = 0
+        var sum_tr = 0
+        var sum_cl = 0
+
+        for (var j = 0; j < HistPerMinute[st].length; j++) {
+          var ob = {}
+          ob['name'] = HistPerMinute[st][j][0]
+          ob['value'] = HistPerMinute[st][j][1]
+          sum += HistPerMinute[st][j][1]
+          //console.log(ob);
+          tmp_list.push(ob)
+
+          if (ob['name'] === "trump" || ob['name'] === "donald") {
+            sum_tr += ob['value']
+            //console.log(sum_tr);
+          }
+          else if (ob['name'] === "clinton" || ob['name'] === "hillary") {
+            sum_cl += ob['value']
+          }
+        }
+
+        //console.log(tmp_list);
+        tmp_hash['name'] = i
+        tmp_hash['children'] = tmp_list
+        tmp_hash['value'] = sum
+        all_words[i].val_tr = sum_tr
+        all_words[i].val_cl = sum_cl
+        //tmp_hash['val_tr'] = sum_tr
+        //tmp_hash['val_cl'] = sum_cl
+        //console.log(all_words[i]);
+        timeline.push(tmp_hash)
+
+      }
+
+      numOfTimelines = timeline.length
+      //console.log(numOfTimelines);
+      //console.log(timeline);
+      //drawBubbleChart(0, 60)
+      drawGraph();
+      drawScale();
+
+  })
+
+});
+
+var movie2 = document.getElementById('movie2');
+movie2.addEventListener('click', function () {
+
+  changeSource("./lib/Decision 2016_ LIVE Election Night Coverage _ NBC News - YouTube - Google Chrome 2016_11_09 12_01_20.mp4")
+
+  d3.csv("./Database/hist_later.csv", function(error, data){
+
+    if(error) { console.log("error"); }
+
+    data.forEach(function(d) {
+        d.time = parseTime(d.time)
+    })
+
+    all_words = data;
+
+    initialTime = all_words[0].time
+    lastTime = all_words[all_words.length - 1].time
+    //console.log(initialTime, lastTime);
+    numOfHists = all_words.length
+    //console.log(numOfHists);
+    margin = bar_width / (all_words.length - 1);
+
+
+  });
+
+  d3.json("./Database/hist_per_minute_later.json", function(error, data){
+
+      var HistPerMinute = {}
+      HistPerMinute = data
+      //console.log(HistPerMinute);
+      timeline = []
+
+      for(var i=0; i<Object.keys(HistPerMinute).length; i++){
+        var st = String(i)
+        var tmp_list = []
+        var tmp_hash = {}
+        var sum = 0
+        var sum_tr = 0
+        var sum_cl = 0
+
+        for (var j = 0; j < HistPerMinute[st].length; j++) {
+          var ob = {}
+          ob['name'] = HistPerMinute[st][j][0]
+          ob['value'] = HistPerMinute[st][j][1]
+          sum += HistPerMinute[st][j][1]
+          //console.log(ob);
+          tmp_list.push(ob)
+
+          if (ob['name'] === "trump" || ob['name'] === "donald") {
+            sum_tr += ob['value']
+            //console.log(sum_tr);
+          }
+          else if (ob['name'] === "clinton" || ob['name'] === "hillary") {
+            sum_cl += ob['value']
+          }
+        }
+
+        //console.log(tmp_list);
+        tmp_hash['name'] = i
+        tmp_hash['children'] = tmp_list
+        tmp_hash['value'] = sum
+        all_words[i].val_tr = sum_tr
+        all_words[i].val_cl = sum_cl
+        //tmp_hash['val_tr'] = sum_tr
+        //tmp_hash['val_cl'] = sum_cl
+        //console.log(all_words[i]);
+        timeline.push(tmp_hash)
+
+      }
+
+      numOfTimelines = timeline.length
+      console.log(numOfTimelines);
+      console.log(timeline);
+      //drawBubbleChart(0, 60)
+      drawGraph();
+      drawScale();
+
+  })
+
+});
+
+var movie3 = document.getElementById('movie3');
+movie3.addEventListener('click', function () {
+
+  changeSource("./lib/Decision 2016_ LIVE Election Night Coverage _ NBC News - YouTube - Google Chrome 2016_11_09 13_00_55.mp4")
+
+  d3.csv("./Database/hist_later2.csv", function(error, data){
+
+    if(error) { console.log("error"); }
+
+    data.forEach(function(d) {
+        d.time = parseTime(d.time)
+    })
+
+    all_words = data;
+
+    initialTime = all_words[0].time
+    lastTime = all_words[all_words.length - 1].time
+    //console.log(initialTime, lastTime);
+    numOfHists = all_words.length
+    //console.log(numOfHists);
+    margin = bar_width / (all_words.length - 1);
+
+
+  });
+
+  d3.json("./Database/hist_per_minute_later2.json", function(error, data){
+
+      timeline = []
+
+      var HistPerMinute = {}
+      HistPerMinute = data
+
+      for(var i=0; i<Object.keys(HistPerMinute).length; i++){
+        var st = String(i)
+        var tmp_list = []
+        var tmp_hash = {}
+        var sum = 0
+        var sum_tr = 0
+        var sum_cl = 0
+
+        for (var j = 0; j < HistPerMinute[st].length; j++) {
+          var ob = {}
+          ob['name'] = HistPerMinute[st][j][0]
+          ob['value'] = HistPerMinute[st][j][1]
+          sum += HistPerMinute[st][j][1]
+          //console.log(ob);
+          tmp_list.push(ob)
+
+          if (ob['name'] === "trump" || ob['name'] === "donald") {
+            sum_tr += ob['value']
+            //console.log(sum_tr);
+          }
+          else if (ob['name'] === "clinton" || ob['name'] === "hillary") {
+            sum_cl += ob['value']
+          }
+        }
+
+        //console.log(tmp_list);
+        tmp_hash['name'] = i
+        tmp_hash['children'] = tmp_list
+        tmp_hash['value'] = sum
+        all_words[i].val_tr = sum_tr
+        all_words[i].val_cl = sum_cl
+        //tmp_hash['val_tr'] = sum_tr
+        //tmp_hash['val_cl'] = sum_cl
+        //console.log(all_words[i]);
+        timeline.push(tmp_hash)
+
+      }
+
+      numOfTimelines = timeline.length
+
+      console.log(numOfTimelines);
+      //drawBubbleChart(0, 60)
+      drawGraph();
+      drawScale();
+
+  })
+
+
+});
+
+function changeSource(url) {
+   //console.log(url);
+   video.src = url;
+
+}
+
+// 自動再生
+video.autoplay = false;
+// ループ
+video.loop = true;
+
+// 再生状態になったとき
+video.addEventListener('play', function() {
+    console.log('再生中');
+});
+// 停止状態になったとき
+video.addEventListener('pause', function() {
+    console.log('停止中');
+});
+
+var preTime = new Date()
+var realTimeUTC = new Date()
+
+// 現在の経過時間
+video.addEventListener('timeupdate', function() {
+
+    currentTime = Math.floor(video.currentTime);
+    //console.log(initialTime);
+    //console.log(currentTime);
+    var realTime = new Date()
+    realTime.setTime(initialTime.getTime() + currentTime * 1000)
+    //console.log(realTime);
+
+    if (currentTime != preTime) {
+      //console.log(numOfHists, numOfTimelines);
+      var delta = totalTime / numOfTimelines
+      drawBubbleChart(currentTime, delta)
+      preTime = currentTime
+      realTimeUTC = realTime.toUTCString().slice(17,25)
+      realTimeUTC_m = realTime.toUTCString().slice(17,22)
+      //console.log(realTimeUTC);
+      timedisplay.innerHTML = "  " + "Time: " + realTimeUTC + " UTC (Universal Time, Coordinated)";
+      bubblename.innerHTML = "Words tweeted from " + realTimeUTC_m + ":00 to " + realTimeUTC_m + ":59 (UTC) using #Election2016"
+
+      var coX = (currentTime * margin ) / 60 + offsetX
+      //console.log(coX);
+
+      drawGraph()
+      drawScale()
+      drawVerticalline(coX)
+
+    }
+
+});
+
+// Hook the ratechange event and display the current playbackRate after each change
+ video.addEventListener("ratechange", function () {
+   ratedisplay.innerHTML = "Rate: " + video.playbackRate;
+ }, false);
+
+// 動画全体の時間
+video.addEventListener('loadedmetadata', function() {
+    totalTime = Math.floor(video.duration);
+});
+
+// playボタンを押した時
+var play = document.getElementById('play');
+play.addEventListener('click', function () {
+    video.play();
+});
+
+// stopボタンを押した時
+var stop = document.getElementById('stop');
+stop.addEventListener('click', function () {
+    video.pause();
+    video.currentTime = 0;
+});
+
+// pauseボタンを押した時
+var pause = document.getElementById('pause');
+pause.addEventListener('click', function () {
+    video.pause();
+    console.log(video.currentTime);
+    //console.log(video.duration);
+});
+
+// goボタンを押した時
+var go = document.getElementById('go');
+go.addEventListener('click', function () {
+    video.currentTime += 10;
+});
+
+// backボタンを押した時
+var back = document.getElementById('back');
+back.addEventListener('click', function () {
+    video.currentTime -= 10;
+});
+
+// rateupボタンを押した時
+
+var rateup = document.getElementById('rateup');
+rateup.addEventListener('click', function () {
+    video.playbackRate += 1;
+});
+
+// ratedownボタンを押した時
+var ratedown = document.getElementById('ratedown');
+ratedown.addEventListener('click', function () {
+    if (video.playbackRate === 1) {
+      video.playbackRate = 1;
+    }
+    else {
+      video.playbackRate--;
+    }
+
+});
+
+// Hook the ratechange event and display the current playbackRate after each change
+ video.addEventListener("ratechange", function () {
+   ratedisplay.innerHTML = "Rate: " + video.playbackRate;
+ }, false);
+
+</script>
+</body></html>
